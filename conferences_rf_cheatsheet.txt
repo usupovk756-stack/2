@@ -1,0 +1,1621 @@
+ШПАРГАЛКА ПРОЕКТА CONFERENCES_RF
+
+ФОТОГРАФИИ:
+
+- conferences_rf/assets/1282150.png
+- conferences_rf/assets/864c66af3dc2cc0eb8166ba359500f25.jpg
+- conferences_rf/assets/ec8a14264510f22a979f3.jpg
+- conferences_rf/assets/image (1).jpeg
+- conferences_rf/assets/image (2).jpeg
+- conferences_rf/assets/image (3).jpeg
+- conferences_rf/assets/image (4).jpeg
+- conferences_rf/assets/praktik-nevskogo-spb-kovorkin.jpg
+- conferences_rf/assets/slide1.jpg
+- conferences_rf/assets/slide2.jpg
+- conferences_rf/assets/slide3.jpg
+- conferences_rf/assets/slide4.jpg
+- conferences_rf/assets/soc.png
+- conferences_rf/assets/social.png
+- conferences_rf/assets/XXL_height.webp
+
+КУДА ЧТО СТАВИТЬ:
+Логотип: assets/1282150.png
+Баннер: assets/image (1).jpeg или slide1.jpg
+Аудитория: assets/864c66af3dc2cc0eb8166ba359500f25.jpg
+Коворкинг: assets/praktik-nevskogo-spb-kovorkin.jpg
+Кинозал: assets/XXL_height.webp
+Соцсети: assets/soc.png
+
+
+============================================================
+ADMIN.PHP
+============================================================
+
+<?php
+require_once 'config.php';
+if (isset($_GET['logout'])) {
+    unset($_SESSION['admin']);
+    header('Location: index.php');
+    exit;
+}
+
+if (!isset($_SESSION['admin'])) {
+    header('Location: index.php');
+    exit;
+}
+
+$message = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_status'])) {
+
+    $app_id = (int)$_POST['app_id'];
+    $status = $_POST['change_status'];
+
+    if (in_array($status, [
+        'Новая',
+        'Мероприятие назначено',
+        'Мероприятие завершено'
+    ])) {
+
+        $stmt = $pdo->prepare(
+            'UPDATE applications SET status = ? WHERE id = ?'
+        );
+
+        $stmt->execute([$status, $app_id]);
+
+        $message =
+            'Статус заявки №' .
+            $app_id .
+            ' изменён на "' .
+            $status .
+            '"';
+    }
+}
+
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_status'], $_SESSION['admin'])) {
+    $app_id = (int)$_POST['app_id'];
+    $status = $_POST['change_status'];
+    if (in_array($status, ['Новая', 'Мероприятие назначено', 'Мероприятие завершено'])) {
+        $stmt = $pdo->prepare('UPDATE applications SET status = ? WHERE id = ?');
+        $stmt->execute([$status, $app_id]);
+        $message = 'Статус заявки №' . $app_id . ' изменён на «' . $status . '»';
+    }
+}
+
+if (!isset($_SESSION['admin'])):
+?>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конференции.РФ — Администратор</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Конференции.РФ</h1>
+        <h2>Панель администратора</h2>
+
+        <?php if ($message): ?>
+            <p class="error"><?= htmlspecialchars($message) ?></p>
+        <?php endif; ?>
+
+        <form method="post">
+            <label>Логин</label>
+            <input type="text" name="admin_login">
+
+            <label>Пароль</label>
+            <input type="password" name="admin_pass">
+
+            <button type="submit">Войти</button>
+        </form>
+
+        <p class="link"><a href="index.php">На главную</a></p>
+    </div>
+</body>
+</html>
+<?php
+exit;
+endif;
+
+$filter = $_GET['filter'] ?? '';
+$sort = $_GET['sort'] ?? 'date_desc';
+$page = max(1, (int)($_GET['page'] ?? 1));
+$per_page = 5;
+
+$where = '';
+$params = [];
+if ($filter !== '' && in_array($filter, ['Новая', 'Мероприятие назначено', 'Мероприятие завершено'])) {
+    $where = 'WHERE a.status = ?';
+    $params[] = $filter;
+}
+
+$order = 'a.created_at DESC';
+if ($sort === 'date_asc') $order = 'a.created_at ASC';
+if ($sort === 'status') $order = 'a.status ASC';
+
+$count_sql = "SELECT COUNT(*) FROM applications a $where";
+$stmt = $pdo->prepare($count_sql);
+$stmt->execute($params);
+$total = (int)$stmt->fetchColumn();
+$pages = max(1, ceil($total / $per_page));
+$offset = ($page - 1) * $per_page;
+
+$sql = "SELECT a.*, u.login, u.fio FROM applications a JOIN users u ON u.id = a.user_id $where ORDER BY $order LIMIT $per_page OFFSET $offset";
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конференции.РФ — Панель администратора</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<?php include 'header.php'; ?>
+<body>
+    <div class="container wide">
+        <h1>Конференции.РФ</h1>
+        <h2>Панель администратора</h2>
+        <p><a href="admin.php?logout=1">Выход</a></p>
+<div class="stats">
+
+    <div class="stat-card">
+        <span>Всего заявок</span>
+        <h3><?= $total ?></h3>
+    </div>
+
+    <div class="stat-card">
+        <span>Новые</span>
+        <h3>
+            <?=
+            $pdo->query("SELECT COUNT(*) FROM applications WHERE status='Новая'")
+            ->fetchColumn();
+            ?>
+        </h3>
+    </div>
+
+    <div class="stat-card">
+        <span>Завершено</span>
+        <h3>
+            <?=
+            $pdo->query("SELECT COUNT(*) FROM applications WHERE status='Мероприятие завершено'")
+            ->fetchColumn();
+            ?>
+        </h3>
+    </div>
+
+</div>
+        <?php if ($message): ?>
+            <div class="popup" id="popup"><?= htmlspecialchars($message) ?></div>
+        <?php endif; ?>
+
+        <form method="get" class="filters">
+            <label>Фильтр по статусу:</label>
+            <select name="filter" onchange="this.form.submit()">
+                <option value="">Все</option>
+                <option value="Новая" <?= $filter === 'Новая' ? 'selected' : '' ?>>Новая</option>
+                <option value="Мероприятие назначено" <?= $filter === 'Мероприятие назначено' ? 'selected' : '' ?>>Мероприятие назначено</option>
+                <option value="Мероприятие завершено" <?= $filter === 'Мероприятие завершено' ? 'selected' : '' ?>>Мероприятие завершено</option>
+            </select>
+
+            <label>Сортировка:</label>
+            <select name="sort" onchange="this.form.submit()">
+                <option value="date_desc" <?= $sort === 'date_desc' ? 'selected' : '' ?>>Дата (новые)</option>
+                <option value="date_asc" <?= $sort === 'date_asc' ? 'selected' : '' ?>>Дата (старые)</option>
+                <option value="status" <?= $sort === 'status' ? 'selected' : '' ?>>По статусу</option>
+            </select>
+        </form>
+
+        <table>
+            <tr>
+                <th>№</th>
+                <th>Пользователь</th>
+                <th>ФИО</th>
+                <th>Помещение</th>
+                <th>Дата</th>
+                <th>Оплата</th>
+                <th>Статус</th>
+                <th>Действие</th>
+            </tr>
+            <?php foreach ($applications as $app): ?>
+            <tr>
+                <td><?= $app['id'] ?></td>
+                <td><?= htmlspecialchars($app['login']) ?></td>
+                <td><?= htmlspecialchars($app['fio']) ?></td>
+                <td><?= htmlspecialchars($app['room_type']) ?></td>
+                <td><?= date('d.m.Y', strtotime($app['conference_date'])) ?></td>
+                <td><?= htmlspecialchars($app['payment_method']) ?></td>
+                <td><?= htmlspecialchars($app['status']) ?></td>
+                <td>
+                    <form method="post" class="inline-form">
+                        <input type="hidden" name="app_id" value="<?= $app['id'] ?>">
+                        <select name="change_status">
+                            <option value="Новая">Новая</option>
+                            <option value="Мероприятие назначено">Мероприятие назначено</option>
+                            <option value="Мероприятие завершено">Мероприятие завершено</option>
+                        </select>
+                        <button type="submit">Изменить</button>
+                    </form>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+
+        <?php if ($pages > 1): ?>
+        <div class="pagination">
+            <?php for ($i = 1; $i <= $pages; $i++): ?>
+                <?php if ($i === $page): ?>
+                    <span class="current"><?= $i ?></span>
+                <?php else: ?>
+                    <a href="?page=<?= $i ?>&filter=<?= urlencode($filter) ?>&sort=<?= urlencode($sort) ?>"><?= $i ?></a>
+                <?php endif; ?>
+            <?php endfor; ?>
+        </div>
+        <?php endif; ?>
+    </div>
+    <script>
+        var popup = document.getElementById('popup');
+        if (popup) {
+            setTimeout(function() { popup.style.display = 'none'; }, 4000);
+        }
+    </script>
+</body>
+<?php include 'footer.php'; ?>
+</html>
+
+
+============================================================
+APPLICATION.PHP
+============================================================
+
+<?php
+require_once 'config.php';
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: index.php');
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+$error = '';
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $room_type = $_POST['room_type'] ?? '';
+    $date_str = trim($_POST['conference_date'] ?? '');
+    $payment = $_POST['payment_method'] ?? '';
+
+    if ($room_type === '' || $date_str === '' || $payment === '') {
+        $error = 'Заполните все поля';
+    } elseif (!preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $date_str)) {
+        $error = 'Дата в формате ДД.ММ.ГГГГ';
+    } else {
+        $parts = explode('.', $date_str);
+        $date = checkdate((int)$parts[1], (int)$parts[0], (int)$parts[2]);
+        if (!$date) {
+            $error = 'Некорректная дата';
+        } else {
+            $db_date = $parts[2] . '-' . $parts[1] . '-' . $parts[0];
+            $stmt = $pdo->prepare('INSERT INTO applications (user_id, room_type, conference_date, payment_method) VALUES (?, ?, ?, ?)');
+            $stmt->execute([$user_id, $room_type, $db_date, $payment]);
+            $success = 'Заявка отправлена на согласование';
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конференции.РФ — Оформление заявки</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<?php include 'header.php'; ?>
+<body>
+    <div class="room-grid">
+
+    <div class="room-card">
+        <img src="assets/864c66af3dc2cc0eb8166ba359500f25.jpg"
+             alt="Аудитория">
+
+        <h4>Аудитория</h4>
+    </div>
+
+    <div class="room-card">
+        <img src="assets/praktik-nevskogo-spb-kovorkin.jpg"
+             alt="Коворкинг">
+
+        <h4>Коворкинг</h4>
+    </div>
+
+    <div class="room-card">
+        <img src="assets/XXL_height.webp"
+             alt="Кинозал">
+
+        <h4>Кинозал</h4>
+    </div>
+
+</div>
+    <div class="container">
+        <h1>Конференции.РФ</h1>
+        <h2>Оформление заявки</h2>
+
+        <?php if ($error): ?>
+            <p class="error"><?= htmlspecialchars($error) ?></p>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <p class="success"><?= htmlspecialchars($success) ?></p>
+        <?php endif; ?>
+
+        <form method="post">
+            <label>Помещение</label>
+            <select name="room_type">
+                <option value="">— выберите —</option>
+                <option value="аудитория">Аудитория</option>
+                <option value="коворкинг">Коворкинг</option>
+                <option value="кинозал">Кинозал</option>
+            </select>
+
+            <label>Дата начала конференции (ДД.ММ.ГГГГ)</label>
+            <input type="text" name="conference_date" placeholder="01.06.2026">
+
+            <label>Способ оплаты</label>
+            <select name="payment_method">
+                <option value="">— выберите —</option>
+                <option value="Наличные">Наличные</option>
+                <option value="Банковская карта">Банковская карта</option>
+                <option value="Безналичный перевод">Безналичный перевод</option>
+            </select>
+
+            <button type="submit">Отправить заявку</button>
+        </form>
+
+        
+    </div>
+</body>
+<?php include 'footer.php'; ?>
+</html>
+
+
+============================================================
+CABINET.PHP
+============================================================
+
+<?php
+require_once 'config.php';
+
+if (!isset($_SESSION['user_id'])) {
+    header('Location: index.php');
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+$review_msg = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_text'], $_POST['application_id'])) {
+    $app_id = (int)$_POST['application_id'];
+    $text = trim($_POST['review_text']);
+
+    $stmt = $pdo->prepare('SELECT status FROM applications WHERE id = ? AND user_id = ?');
+    $stmt->execute([$app_id, $user_id]);
+    $app = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($app && $app['status'] !== 'Новая' && $text !== '') {
+        $stmt = $pdo->prepare('INSERT INTO reviews (user_id, application_id, text) VALUES (?, ?, ?)');
+        $stmt->execute([$user_id, $app_id, $text]);
+        $review_msg = 'Отзыв отправлен';
+    }
+}
+
+$stmt = $pdo->prepare('
+    SELECT a.*, r.text AS review_text
+    FROM applications a
+    LEFT JOIN reviews r ON r.application_id = a.id
+    WHERE a.user_id = ?
+    ORDER BY a.created_at DESC
+');
+$stmt->execute([$user_id]);
+$applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конференции.РФ — Личный кабинет</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<?php include 'header.php'; ?>
+<body>
+    <div class="container wide">
+        <h1>Конференции.РФ</h1>
+        <h2>Личный кабинет</h2>
+        <div class="welcome-card">
+    <h3>Добро пожаловать, <?= htmlspecialchars($_SESSION['user_login']) ?>!</h3>
+    <p>Здесь вы можете отслеживать статус заявок и оставлять отзывы.</p>
+</div>
+
+        <div class="slider">
+            <button type="button" class="slider-btn" id="prev">&#10094;</button>
+            <div class="slider-track">
+                <img src="images/slide1.jpg" class="slide active" alt="Слайд 1">
+                <img src="images/slide2.jpg" class="slide" alt="Слайд 2">
+                <img src="images/slide3.jpg" class="slide" alt="Слайд 3">
+                <img src="images/slide4.jpg" class="slide" alt="Слайд 4">
+            </div>
+            <button type="button" class="slider-btn" id="next">&#10095;</button>
+        </div>
+
+        <p class="nav-links">
+            <a href="application.php">Оформить заявку</a>
+            <a href="logout.php">Выход</a>
+        </p>
+
+        <?php if ($review_msg): ?>
+            <p class="success"><?= htmlspecialchars($review_msg) ?></p>
+        <?php endif; ?>
+
+        <h3>История заявок</h3>
+
+        <?php if (empty($applications)): ?>
+            <p>Заявок пока нет</p>
+        <?php else: ?>
+            <table>
+                <tr>
+                    <th>№</th>
+                    <th>Помещение</th>
+                    <th>Дата</th>
+                    <th>Оплата</th>
+                    <th>Статус</th>
+                    <th>Отзыв</th>
+                </tr>
+                <?php foreach ($applications as $app): ?>
+                <tr>
+                    <td><?= $app['id'] ?></td>
+                    <td><?= htmlspecialchars($app['room_type']) ?></td>
+                    <td><?= date('d.m.Y', strtotime($app['conference_date'])) ?></td>
+                    <td><?= htmlspecialchars($app['payment_method']) ?></td>
+                    <td><?= htmlspecialchars($app['status']) ?></td>
+                    <td>
+                        <?php if ($app['review_text']): ?>
+                            <?= htmlspecialchars($app['review_text']) ?>
+                        <?php elseif ($app['status'] !== 'Новая'): ?>
+                            <form method="post" class="review-form">
+                                <input type="hidden" name="application_id" value="<?= $app['id'] ?>">
+                                <textarea name="review_text" rows="2" placeholder="Ваш отзыв"></textarea>
+                                <button type="submit">Отправить</button>
+                            </form>
+                        <?php else: ?>
+                            —
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </table>
+        <?php endif; ?>
+    </div>
+    <script src="slider.js"></script>
+<?php include 'footer.php'; ?>
+
+</body>
+</html>
+
+
+============================================================
+CONFERENCES_RF.SQL
+============================================================
+
+-- phpMyAdmin SQL Dump
+-- version 5.2.1
+-- https://www.phpmyadmin.net/
+--
+-- Host: 127.0.0.1
+-- Generation Time: Jun 19, 2026 at 10:40 PM
+-- Server version: 10.4.32-MariaDB
+-- PHP Version: 8.2.12
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
+
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
+
+--
+-- Database: `conferences_rf`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `applications`
+--
+
+CREATE TABLE `applications` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `room_type` enum('аудитория','коворкинг','кинозал') NOT NULL,
+  `conference_date` date NOT NULL,
+  `payment_method` varchar(50) NOT NULL,
+  `status` enum('Новая','Мероприятие назначено','Мероприятие завершено') DEFAULT 'Новая',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `applications`
+--
+
+INSERT INTO `applications` (`id`, `user_id`, `room_type`, `conference_date`, `payment_method`, `status`, `created_at`) VALUES
+(1, 1, 'аудитория', '2026-06-02', 'Банковская карта', 'Мероприятие назначено', '2026-06-19 16:51:08'),
+(2, 1, 'коворкинг', '2026-06-02', 'Безналичный перевод', 'Новая', '2026-06-19 19:58:01');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `reviews`
+--
+
+CREATE TABLE `reviews` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `application_id` int(11) NOT NULL,
+  `text` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `reviews`
+--
+
+INSERT INTO `reviews` (`id`, `user_id`, `application_id`, `text`, `created_at`) VALUES
+(1, 1, 1, 'ав', '2026-06-19 20:33:43');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `users`
+--
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL,
+  `login` varchar(50) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `fio` varchar(255) NOT NULL,
+  `phone` varchar(20) NOT NULL,
+  `email` varchar(100) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Dumping data for table `users`
+--
+
+INSERT INTO `users` (`id`, `login`, `password`, `fio`, `phone`, `email`, `created_at`) VALUES
+(1, 'kamama123', '$2y$10$MnQP6V/NsQUWKoJ7KWbm8u7taLzUvGSvFKqaOMsfhRuHi65wWUMTS', 'NAIL IUSUPOV', '8 925 075-33-31', 'usupovk756@gmail.com', '2026-06-19 15:18:27');
+
+--
+-- Indexes for dumped tables
+--
+
+--
+-- Indexes for table `applications`
+--
+ALTER TABLE `applications`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `user_id` (`user_id`);
+
+--
+-- Indexes for table `reviews`
+--
+ALTER TABLE `reviews`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `application_id` (`application_id`),
+  ADD KEY `user_id` (`user_id`);
+
+--
+-- Indexes for table `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `login` (`login`);
+
+--
+-- AUTO_INCREMENT for dumped tables
+--
+
+--
+-- AUTO_INCREMENT for table `applications`
+--
+ALTER TABLE `applications`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `reviews`
+--
+ALTER TABLE `reviews`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT for table `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- Constraints for dumped tables
+--
+
+--
+-- Constraints for table `applications`
+--
+ALTER TABLE `applications`
+  ADD CONSTRAINT `applications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `reviews`
+--
+ALTER TABLE `reviews`
+  ADD CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `reviews_ibfk_2` FOREIGN KEY (`application_id`) REFERENCES `applications` (`id`) ON DELETE CASCADE;
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+
+============================================================
+CONFIG.PHP
+============================================================
+
+<?php
+session_start();
+
+$host = 'localhost';
+$dbname = 'conferences_rf';
+$user = 'root';
+$pass = '';
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $user, $pass);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (PDOException $e) {
+    die('Ошибка подключения к базе данных');
+}
+
+
+============================================================
+DATABASE.SQL
+============================================================
+
+CREATE DATABASE IF NOT EXISTS conferences_rf CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE conferences_rf;
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    login VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    fio VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE applications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    room_type ENUM('аудитория', 'коворкинг', 'кинозал') NOT NULL,
+    conference_date DATE NOT NULL,
+    payment_method VARCHAR(50) NOT NULL,
+    status ENUM('Новая', 'Мероприятие назначено', 'Мероприятие завершено') DEFAULT 'Новая',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE reviews (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    application_id INT NOT NULL UNIQUE,
+    text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
+);
+
+
+============================================================
+FOOTER.PHP
+============================================================
+
+<footer class="site-footer">
+
+    <div class="footer-content">
+
+        <div class="footer-column">
+
+            <h3>Конференции.РФ</h3>
+
+            <p>
+                Информационная система для бронирования помещений
+                для проведения всероссийских конференций.
+            </p>
+
+        </div>
+
+        <div class="footer-column">
+
+            <h3>Контакты</h3>
+
+            <p>Телефон: +7 (800) 555-35-35</p>
+            <p>Email: info@conference-rf.ru</p>
+
+        </div>
+
+        <div class="footer-column">
+
+            <h3>Мы в социальных сетях</h3>
+
+            <div class="socials">
+
+    <a href="https://vk.com" target="_blank">
+        <img src="assets/soc.png" alt="Соцсети">
+    </a>
+
+</div>
+
+        </div>
+
+    </div>
+
+    <div class="footer-bottom">
+        © 2026 Конференции.РФ. Все права защищены.
+    </div>
+
+</footer>
+
+============================================================
+HEADER.PHP
+============================================================
+
+<?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+?>
+
+<header class="site-header">
+
+    <div class="header-inner">
+
+        <a href="index.php" class="logo">
+    <img src="assets/1282150.png" >
+
+    <div class="logo-text">
+        <span class="logo-title">Конференции.РФ</span>
+        
+    </div>
+</a>
+
+        <nav class="menu">
+
+            <?php if (isset($_SESSION['admin'])): ?>
+
+                <a href="admin.php">Панель администратора</a>
+                <a href="admin.php?logout=1" class="btn-nav">Выход</a>
+
+            <?php elseif (isset($_SESSION['user_id'])): ?>
+
+                <a href="cabinet.php">Личный кабинет</a>
+                <a href="application.php">Оформить заявку</a>
+                <a href="logout.php" class="btn-nav">Выход</a>
+
+            <?php else: ?>
+
+                <a href="index.php">Вход</a>
+                <a href="register.php">Регистрация</a>
+
+            <?php endif; ?>
+
+        </nav>
+
+    </div>
+
+</header>
+
+============================================================
+INDEX.PHP
+============================================================
+
+<?php
+require_once 'config.php';
+
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $login = trim($_POST['login'] ?? '');
+    $password = $_POST['password'] ?? '';
+if ($login === 'Admin26' && $password === 'Demo20') {
+
+    $_SESSION['admin'] = true;
+
+    header('Location: admin.php');
+    exit;
+}
+    if ($login === '' || $password === '') {
+        $error = 'Заполните все поля';
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE login = ?');
+        $stmt->execute([$login]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user && password_verify($password, $user['password'])) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_login'] = $user['login'];
+            header('Location: cabinet.php');
+            exit;
+        } else {
+            $error = 'Неверный логин или пароль';
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конференции.РФ — Вход</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<?php include 'header.php'; ?>
+<body>
+    
+    <div class="container">
+        <h1>Конференции.РФ</h1>
+        <h2>Вход в систему</h2>
+
+        <?php if ($error): ?>
+            <p class="error"><?= htmlspecialchars($error) ?></p>
+        <?php endif; ?>
+
+        <form method="post">
+            <label>Логин</label>
+            <input type="text" name="login" value="<?= htmlspecialchars($_POST['login'] ?? '') ?>">
+
+            <label>Пароль</label>
+            <input type="password" name="password">
+
+            <button type="submit">Войти</button>
+        </form>
+
+        <p class="link"><a href="register.php">Еще не зарегистрированы? Регистрация</a></p>
+        
+    </div>
+</body>
+<?php include 'footer.php'; ?>
+</html>
+
+
+============================================================
+LOGOUT.PHP
+============================================================
+
+<?php
+session_start();
+session_destroy();
+header('Location: index.php');
+exit;
+
+
+============================================================
+REGISTER.PHP
+============================================================
+
+<?php
+require_once 'config.php';
+
+$errors = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $login = trim($_POST['login'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $fio = trim($_POST['fio'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+
+    if ($login === '') {
+        $errors['login'] = 'Введите логин';
+    } elseif (!preg_match('/^[a-zA-Z0-9]{6,}$/', $login)) {
+        $errors['login'] = 'Логин: латинские буквы и цифры, минимум 6 символов';
+    } else {
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE login = ?');
+        $stmt->execute([$login]);
+        if ($stmt->fetch()) {
+            $errors['login'] = 'Логин уже занят';
+        }
+    }
+
+    if ($password === '') {
+        $errors['password'] = 'Введите пароль';
+    } elseif (strlen($password) < 8) {
+        $errors['password'] = 'Пароль: минимум 8 символов';
+    }
+
+    if ($fio === '') {
+        $errors['fio'] = 'Введите ФИО';
+    }
+
+    if ($phone === '') {
+        $errors['phone'] = 'Введите номер телефона';
+    }
+
+    if ($email === '') {
+        $errors['email'] = 'Введите e-mail';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors['email'] = 'Некорректный e-mail';
+    }
+
+    if (empty($errors)) {
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare('INSERT INTO users (login, password, fio, phone, email) VALUES (?, ?, ?, ?, ?)');
+        $stmt->execute([$login, $hash, $fio, $phone, $email]);
+        header('Location: index.php');
+        exit;
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конференции.РФ — Регистрация</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<?php include 'header.php'; ?>
+    <div class="container">
+        <h1>Конференции.РФ</h1>
+        <h2>Регистрация</h2>
+
+        <form method="post">
+            <label>Логин</label>
+            <input type="text" name="login" value="<?= htmlspecialchars($_POST['login'] ?? '') ?>">
+            <?php if (isset($errors['login'])): ?><span class="hint"><?= htmlspecialchars($errors['login']) ?></span><?php endif; ?>
+
+            <label>Пароль</label>
+            <input type="password" name="password">
+            <?php if (isset($errors['password'])): ?><span class="hint"><?= htmlspecialchars($errors['password']) ?></span><?php endif; ?>
+
+            <label>ФИО</label>
+            <input type="text" name="fio" value="<?= htmlspecialchars($_POST['fio'] ?? '') ?>">
+            <?php if (isset($errors['fio'])): ?><span class="hint"><?= htmlspecialchars($errors['fio']) ?></span><?php endif; ?>
+
+            <label>Контактный телефон</label>
+            <input type="text" name="phone" value="<?= htmlspecialchars($_POST['phone'] ?? '') ?>">
+            <?php if (isset($errors['phone'])): ?><span class="hint"><?= htmlspecialchars($errors['phone']) ?></span><?php endif; ?>
+
+            <label>E-mail</label>
+            <input type="email" name="email" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
+            <?php if (isset($errors['email'])): ?><span class="hint"><?= htmlspecialchars($errors['email']) ?></span><?php endif; ?>
+
+            <button type="submit">Зарегистрироваться</button>
+        </form>
+
+        <p class="link"><a href="index.php">Уже зарегистрированы? Вход</a></p>
+    </div>
+<?php include 'footer.php'; ?>
+
+</body>
+</html>
+
+
+============================================================
+SLIDER.JS
+============================================================
+
+var slides = document.querySelectorAll('.slide');
+var current = 0;
+var timer;
+
+function showSlide(n) {
+    slides[current].classList.remove('active');
+    current = (n + slides.length) % slides.length;
+    slides[current].classList.add('active');
+}
+
+function nextSlide() {
+    showSlide(current + 1);
+}
+
+function prevSlide() {
+    showSlide(current - 1);
+}
+
+function startTimer() {
+    timer = setInterval(nextSlide, 3000);
+}
+
+function resetTimer() {
+    clearInterval(timer);
+    startTimer();
+}
+
+document.getElementById('next').addEventListener('click', function() {
+    nextSlide();
+    resetTimer();
+});
+
+document.getElementById('prev').addEventListener('click', function() {
+    prevSlide();
+    resetTimer();
+});
+
+startTimer();
+
+
+============================================================
+STYLE.CSS
+============================================================
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    font-family:'Roboto',sans-serif;
+    background:linear-gradient(135deg,#edf2f7,#dbeafe);
+    min-height:100vh;
+    color:#1f2937;
+}
+
+.container{
+    width:100%;
+    max-width:560px;
+    margin:40px auto;
+    background:#fff;
+    border-radius:24px;
+    padding:40px;
+    box-shadow:0 15px 40px rgba(0,0,0,.08);
+}
+
+.container.wide{
+    max-width:1200px;
+}
+
+h1{
+    color:#16a34a;
+    font-size:54px;
+    margin-bottom:10px;
+    font-weight:700;
+}
+
+h2{
+    font-size:42px;
+    margin-bottom:25px;
+    color:#1f2937;
+}
+
+h3{
+    font-size:28px;
+    margin:30px 0 15px;
+}
+
+.logo-subtitle{
+    color:#6b7280;
+    margin-bottom:25px;
+}
+
+label{
+    display:block;
+    margin-bottom:8px;
+    margin-top:16px;
+    font-weight:600;
+}
+
+input,
+select,
+textarea{
+    width:100%;
+    padding:14px;
+    border:1px solid #dbe3ea;
+    border-radius:12px;
+    font-size:15px;
+    transition:.3s;
+}
+
+input:focus,
+select:focus,
+textarea:focus{
+    outline:none;
+    border-color:#22c55e;
+    box-shadow:0 0 0 4px rgba(34,197,94,.15);
+}
+
+button{
+    margin-top:20px;
+    border:none;
+    background:#22c55e;
+    color:#fff;
+    padding:14px 24px;
+    border-radius:12px;
+    font-size:16px;
+    font-weight:600;
+    cursor:pointer;
+    transition:.3s;
+}
+
+button:hover{
+    transform:translateY(-2px);
+    background:#16a34a;
+}
+
+.link{
+    text-align:center;
+    margin-top:25px;
+}
+
+.link a,
+.nav-links a{
+    color:#16a34a;
+    text-decoration:none;
+    font-weight:600;
+}
+
+.link a:hover,
+.nav-links a:hover{
+    text-decoration:underline;
+}
+
+.error{
+    background:#fee2e2;
+    color:#b91c1c;
+    padding:15px;
+    border-radius:12px;
+    margin-bottom:20px;
+}
+
+.success{
+    background:#dcfce7;
+    color:#166534;
+    padding:15px;
+    border-radius:12px;
+    margin-bottom:20px;
+}
+
+.hint{
+    display:block;
+    color:#dc2626;
+    font-size:13px;
+    margin-top:5px;
+}
+
+.nav-links{
+    display:flex;
+    gap:15px;
+    margin:25px 0;
+}
+
+.nav-links a{
+    background:#22c55e;
+    color:#fff;
+    padding:12px 20px;
+    border-radius:12px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    overflow:hidden;
+    border-radius:16px;
+    background:#fff;
+}
+
+table th{
+    background:#1f2937;
+    color:#fff;
+    padding:15px;
+}
+
+table td{
+    border:1px solid #e5e7eb;
+    padding:15px;
+}
+
+.slider{
+    display:flex;
+    align-items:center;
+    gap:15px;
+    margin:25px 0;
+}
+
+.slider-track{
+    flex:1;
+    height:350px;
+    position:relative;
+    overflow:hidden;
+    border-radius:18px;
+    box-shadow:0 10px 30px rgba(0,0,0,.12);
+}
+
+.slide{
+    position:absolute;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:none;
+}
+
+.slide.active{
+    display:block;
+}
+
+.slider-btn{
+    margin-top:0;
+    width:46px;
+    height:46px;
+    border-radius:12px;
+    background:#1f2937;
+}
+
+.filters{
+    display:flex;
+    gap:20px;
+    align-items:center;
+    margin:25px 0;
+    flex-wrap:wrap;
+}
+
+.filters select{
+    width:auto;
+}
+
+.inline-form{
+    display:flex;
+    gap:10px;
+}
+
+.inline-form button{
+    margin-top:0;
+}
+
+.pagination{
+    text-align:center;
+    margin-top:30px;
+}
+
+.pagination a,
+.pagination span{
+    display:inline-block;
+    padding:10px 15px;
+    margin:3px;
+    border-radius:10px;
+    text-decoration:none;
+}
+
+.pagination a{
+    background:#f3f4f6;
+    color:#111827;
+}
+
+.pagination .current{
+    background:#22c55e;
+    color:#fff;
+}
+
+.popup{
+    position:fixed;
+    top:20px;
+    right:20px;
+    background:#22c55e;
+    color:#fff;
+    padding:18px 30px;
+    border-radius:14px;
+    font-weight:600;
+    box-shadow:0 10px 25px rgba(0,0,0,.15);
+}
+
+.welcome-card{
+    background:linear-gradient(135deg,#16a34a,#22c55e);
+    color:#fff;
+    border-radius:20px;
+    padding:25px;
+    margin-bottom:25px;
+}
+
+.room-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:15px;
+    margin-bottom:20px;
+}
+
+.room-card{
+    background:#fff;
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 5px 20px rgba(0,0,0,.08);
+}
+
+.room-card img{
+    width:100%;
+    height:150px;
+    object-fit:cover;
+}
+
+.room-card h4{
+    padding:12px;
+    text-align:center;
+}
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:15px;
+    margin-bottom:25px;
+}
+
+.stat-card{
+    background:#fff;
+    border-radius:16px;
+    padding:20px;
+    text-align:center;
+    box-shadow:0 5px 15px rgba(0,0,0,.08);
+}
+
+.stat-card h3{
+    margin:10px 0 0;
+    color:#16a34a;
+}
+
+@media(max-width:768px){
+
+    .container{
+        margin:15px;
+        padding:20px;
+    }
+
+    .container.wide{
+        margin:10px;
+    }
+
+    h1{
+        font-size:36px;
+    }
+
+    h2{
+        font-size:28px;
+    }
+
+    .room-grid{
+        grid-template-columns:1fr;
+    }
+
+    .stats{
+        grid-template-columns:1fr;
+    }
+
+    .filters{
+        flex-direction:column;
+        align-items:stretch;
+    }
+
+    table{
+        display:block;
+        overflow-x:auto;
+    }
+
+    .slider-track{
+        height:220px;
+    }
+
+    .nav-links{
+        flex-direction:column;
+    }
+}
+.site-header{
+    background:#ffffff;
+    box-shadow:0 3px 15px rgba(0,0,0,.06);
+    position:sticky;
+    top:0;
+    z-index:1000;
+}
+
+.header-inner{
+    max-width:1200px;
+    margin:auto;
+    padding:18px 25px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.logo{
+    text-decoration:none;
+    color:#16a34a;
+    font-size:32px;
+    font-weight:700;
+}
+
+.menu{
+    display:flex;
+    gap:18px;
+    align-items:center;
+}
+
+.menu a{
+    text-decoration:none;
+    color:#374151;
+    font-weight:500;
+    transition:.3s;
+}
+
+.menu a:hover{
+    color:#16a34a;
+}
+
+.btn-nav{
+    background:#22c55e;
+    color:#fff !important;
+    padding:10px 18px;
+    border-radius:10px;
+}
+
+.site-footer{
+    margin-top:60px;
+    background:#1f2937;
+    color:white;
+}
+
+.footer-content{
+    max-width:1200px;
+    margin:auto;
+    padding:40px 25px;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:30px;
+}
+
+.footer-column h3{
+    margin-bottom:15px;
+    color:#22c55e;
+}
+
+.footer-column p{
+    margin-bottom:8px;
+    line-height:1.5;
+}
+
+.footer-column a{
+    color:white;
+    text-decoration:none;
+}
+
+.footer-column a:hover{
+    color:#22c55e;
+}
+
+.footer-bottom{
+    text-align:center;
+    padding:15px;
+    border-top:1px solid rgba(255,255,255,.1);
+}
+
+@media(max-width:768px){
+
+    .header-inner{
+        flex-direction:column;
+        gap:15px;
+    }
+
+    .menu{
+        flex-wrap:wrap;
+        justify-content:center;
+    }
+
+    .footer-content{
+        grid-template-columns:1fr;
+        text-align:center;
+    }
+}
+.logo{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.logo img{
+    width:45px;
+    height:45px;
+}
+.socials{
+    display:flex;
+    gap:15px;
+    margin-top:15px;
+}
+
+.socials a{
+    transition:.3s;
+}
+
+.socials a:hover{
+    transform:translateY(-3px);
+}
+
+.socials img{
+    width:42px;
+    height:42px;
+    object-fit:contain;
+}
+.site-footer{
+    margin-top:60px;
+    background:#1f2937;
+    color:#fff;
+}
+
+.footer-content{
+    max-width:1200px;
+    margin:auto;
+    padding:40px 30px;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:40px;
+}
+
+.footer-column h3{
+    margin-bottom:15px;
+    color:#22c55e;
+}
+
+.footer-column p{
+    line-height:1.6;
+    margin-bottom:8px;
+}
+
+.socials{
+    display:flex;
+    gap:15px;
+    margin-top:10px;
+}
+
+.socials img{
+    width:300px;
+    height:100px;
+    object-fit:contain;
+}
+
+.socials img:hover{
+    transform:scale(1.15);
+}
+
+.footer-bottom{
+    text-align:center;
+    padding:15px;
+    border-top:1px solid rgba(255,255,255,.15);
+    color:#d1d5db;
+}
+
+@media(max-width:768px){
+
+    .footer-content{
+        grid-template-columns:1fr;
+        text-align:center;
+    }
+
+    .socials{
+        justify-content:center;
+    }
+
+}
+.hero{
+    background:url('images/1679169355_design-pibig-info-p-sovr.jpg') center/cover;
+}
